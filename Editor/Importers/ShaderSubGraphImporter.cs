@@ -158,7 +158,18 @@ namespace UnityEditor.ShaderGraph
                 {
                     registry.builder.currentNode = node;
                     generatesFunction.GenerateNodeFunction(registry, GenerationMode.ForReals);
-                    registry.builder.ReplaceInCurrentMapping(PrecisionUtil.Token, node.concretePrecision.ToShaderString());
+                    
+                    // this call is unnecessary, the meat is in values of registry.sources
+                    //registry.builder.ReplaceInCurrentMapping(PrecisionUtil.Token, node.concretePrecision.ToShaderString());
+                    
+                    // ugly hack to fix precision of subgraph functions
+                    var keys = registry.sources.Keys.ToList();
+                    foreach (var key in keys)
+                    {
+                        var value = registry.sources[key];
+                        value.code = value.code.Replace(PrecisionUtil.Token, node.concretePrecision.ToShaderString());
+                        registry.sources[key] = value;
+                    }
                 }
             }
 
