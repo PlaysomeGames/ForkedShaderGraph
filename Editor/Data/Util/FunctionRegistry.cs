@@ -38,6 +38,7 @@ namespace UnityEditor.ShaderGraph
                 {
                     var startIndex = builder.length;
                     generator(builder);
+                    builder.ReplaceInCurrentMapping(PrecisionUtil.Token, builder.currentNode.concretePrecision.ToShaderString());
                     var length = builder.length - startIndex;
                     var code = builder.ToString(startIndex, length);
                     builder.length -= length;
@@ -50,6 +51,7 @@ namespace UnityEditor.ShaderGraph
                 builder.AppendNewLine();
                 var startIndex = builder.length;
                 generator(builder);
+                builder.ReplaceInCurrentMapping(PrecisionUtil.Token, builder.currentNode.concretePrecision.ToShaderString());
                 var length = builder.length - startIndex;
                 var code = m_Validate ? builder.ToString(startIndex, length) : string.Empty;
                 m_Sources.Add(name, new FunctionSource { code = code, nodes = new HashSet<AbstractMaterialNode> {builder.currentNode} });
