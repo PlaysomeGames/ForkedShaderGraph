@@ -14,7 +14,7 @@ namespace UnityEditor.ShaderGraph
         public VertexColorNode()
         {
             name = "Vertex Color";
-            m_PreviewMode = PreviewMode.Preview3D;
+            m_PreviewMode = PreviewMode.Preview2D;
             UpdateNodeAfterDeserialization();
         }
 
