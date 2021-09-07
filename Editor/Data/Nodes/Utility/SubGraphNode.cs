@@ -147,10 +147,7 @@ namespace UnityEditor.ShaderGraph
         {
             get
             {
-                if (asset == null)
-                    return PreviewMode.Preview2D;
-
-                return PreviewMode.Preview3D;
+                return PreviewMode.Preview2D;
             }
         }
 

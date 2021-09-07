@@ -13,7 +13,7 @@ namespace UnityEditor.ShaderGraph
 
         public override PreviewMode previewMode
         {
-            get { return PreviewMode.Preview3D; }
+            get { return PreviewMode.Preview2D; }
         }
 
         public VertexColorNode()
