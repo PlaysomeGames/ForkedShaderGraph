@@ -5,6 +5,7 @@ namespace UnityEditor.ShaderGraph
     [Flags]
     enum ShaderStageCapability
     {
+        None = 0,
         Vertex = 1 << 0,
         Fragment = 1 << 1,
         All = Vertex | Fragment
@@ -37,6 +38,19 @@ namespace UnityEditor.ShaderGraph
                 default:
                     stage = ShaderStage.Fragment;
                     return false;
+            }
+        }
+
+        public static ShaderStageCapability GetShaderStageCapability(this ShaderStage stage)
+        {
+            switch (stage)
+            {
+                case ShaderStage.Vertex:
+                    return ShaderStageCapability.Vertex;
+                case ShaderStage.Fragment:
+                    return ShaderStageCapability.Fragment;
+                default:
+                    return ShaderStageCapability.Fragment;
             }
         }
     }

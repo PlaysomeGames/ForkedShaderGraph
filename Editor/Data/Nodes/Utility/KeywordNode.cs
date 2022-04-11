@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEditor.Graphing;
-using UnityEngine.Serialization;
-using UnityEditor.ShaderGraph.Internal;
+using UnityEditor.ShaderGraph.Serialization;
 
 namespace UnityEditor.ShaderGraph
 {
+    [Serializable]
     [Title("Utility", "Keyword")]
     class KeywordNode : AbstractMaterialNode, IOnAssetEnabled, IGeneratesBodyCode
     {
@@ -18,21 +18,20 @@ namespace UnityEditor.ShaderGraph
         {
             UpdateNodeAfterDeserialization();
         }
-        
+
         [SerializeField]
-        private string m_KeywordGuidSerialized;
+        JsonRef<ShaderKeyword> m_Keyword;
 
-        private Guid m_KeywordGuid;
-
-        public Guid keywordGuid
+        public ShaderKeyword keyword
         {
-            get { return m_KeywordGuid; }
+            get { return m_Keyword; }
             set
             {
-                if (m_KeywordGuid == value)
+                if (m_Keyword == value)
                     return;
 
-                m_KeywordGuid = value;
+                m_Keyword = value;
+                m_Keyword.value.displayNameUpdateTrigger += UpdateNodeDisplayName;
                 UpdateNode();
                 Dirty(ModificationScope.Topological);
             }
@@ -42,6 +41,14 @@ namespace UnityEditor.ShaderGraph
         public override bool hasPreview => true;
         public const int OutputSlotId = 0;
 
+        public void UpdateNodeDisplayName(string newDisplayName)
+        {
+            MaterialSlot foundSlot = FindSlot<MaterialSlot>(OutputSlotId);
+
+            if (foundSlot != null)
+                foundSlot.displayName = newDisplayName;
+        }
+
         public void OnEnable()
         {
             UpdateNode();
@@ -49,79 +56,73 @@ namespace UnityEditor.ShaderGraph
 
         public void UpdateNode()
         {
-            var keyword = owner.keywords.FirstOrDefault(x => x.guid == keywordGuid);
-            if (keyword == null)
-                return;
-            
             name = keyword.displayName;
-            UpdatePorts(keyword);
+            UpdatePorts();
         }
 
-        void UpdatePorts(ShaderKeyword keyword)
+        void UpdatePorts()
         {
-            switch(keyword.keywordType)
+            switch (keyword.keywordType)
             {
                 case KeywordType.Boolean:
                 {
                     // Boolean type has preset slots
+                    PooledList<MaterialSlot> temp = PooledList<MaterialSlot>.Get();
+                    GetInputSlots(temp);
+                    if (temp.Any())
+                    {
+                        temp.Dispose();
+                        break;
+                    }
+                    else
+                    {
+                        temp.Dispose();
+                    }
                     AddSlot(new DynamicVectorMaterialSlot(OutputSlotId, "Out", "Out", SlotType.Output, Vector4.zero));
                     AddSlot(new DynamicVectorMaterialSlot(1, "On", "On", SlotType.Input, Vector4.zero));
                     AddSlot(new DynamicVectorMaterialSlot(2, "Off", "Off", SlotType.Input, Vector4.zero));
-                    RemoveSlotsNameNotMatching(new int[] {0, 1, 2});
+                    RemoveSlotsNameNotMatching(new int[] { 0, 1, 2 });
                     break;
                 }
                 case KeywordType.Enum:
-                {
-                    // Get slots
-                    List<MaterialSlot> inputSlots = new List<MaterialSlot>();
-                    GetInputSlots(inputSlots);
-
-                    // Store the edges
-                    Dictionary<MaterialSlot, List<IEdge>> edgeDict = new Dictionary<MaterialSlot, List<IEdge>>();
-                    foreach (MaterialSlot slot in inputSlots)
-                        edgeDict.Add(slot, (List<IEdge>)slot.owner.owner.GetEdges(slot.slotReference));
-                    
-                    // Remove old slots
-                    for(int i = 0; i < inputSlots.Count; i++)
+                    using (var inputSlots = PooledList<MaterialSlot>.Get())
+                    using (var slotIDs = PooledList<int>.Get())
                     {
-                        RemoveSlot(inputSlots[i].id);
-                    } 
+                        // Get slots
+                        GetInputSlots(inputSlots);
 
-                    // Add output slot
-                    AddSlot(new DynamicVectorMaterialSlot(OutputSlotId, "Out", "Out", SlotType.Output, Vector4.zero));
 
-                    // Add input slots
-                    int[] slotIds = new int[keyword.entries.Count + 1];
-                    slotIds[keyword.entries.Count] = OutputSlotId;
-                    for(int i = 0; i < keyword.entries.Count; i++)
-                    {
-                        // Get slot based on entry id
-                        MaterialSlot slot = inputSlots.Where(x => 
-                            x.id == keyword.entries[i].id &&
-                            x.RawDisplayName() == keyword.entries[i].displayName && 
-                            x.shaderOutputName == keyword.entries[i].referenceName).FirstOrDefault();
+                        // Add output slot
+                        AddSlot(new DynamicVectorMaterialSlot(OutputSlotId, "Out", "Out", SlotType.Output, Vector4.zero));
+                        slotIDs.Add(OutputSlotId);
 
-                        // If slot doesnt exist its new so create it
-                        if(slot == null)
+                        // Add input slots
+                        for (int i = 0; i < keyword.entries.Count; i++)
                         {
-                            slot = new DynamicVectorMaterialSlot(keyword.entries[i].id, keyword.entries[i].displayName, keyword.entries[i].referenceName, SlotType.Input, Vector4.zero);
+                            // Get slot based on entry id
+                            MaterialSlot slot = inputSlots.Find(x =>
+                                x.id == keyword.entries[i].id &&
+                                x.RawDisplayName() == keyword.entries[i].displayName &&
+                                x.shaderOutputName == keyword.entries[i].referenceName);
+
+                            // If slot doesn't exist, it's new so create it
+                            if (slot == null)
+                            {
+                                slot = new DynamicVectorMaterialSlot(keyword.entries[i].id, keyword.entries[i].displayName, keyword.entries[i].referenceName, SlotType.Input, Vector4.zero);
+                            }
+
+                            AddSlot(slot);
+                            slotIDs.Add(keyword.entries[i].id);
                         }
-
-                        AddSlot(slot);
-                        slotIds[i] = keyword.entries[i].id;
-                    }
-                    RemoveSlotsNameNotMatching(slotIds);
-
-                    // Reconnect the edges
-                    foreach (KeyValuePair<MaterialSlot, List<IEdge>> entry in edgeDict)
-                    {
-                        foreach (IEdge edge in entry.Value)
+                        RemoveSlotsNameNotMatching(slotIDs);
+                        bool orderChanged = SetSlotOrder(slotIDs);
+                        if (orderChanged)
                         {
-                            owner.Connect(edge.outputSlot, edge.inputSlot);
+                            // unfortunately there is no way to get the view to update slot order other than Topological
+                            Dirty(ModificationScope.Topological);
                         }
+                        break;
                     }
-                    break;
-                }
             }
 
             ValidateNode();
@@ -129,12 +130,8 @@ namespace UnityEditor.ShaderGraph
 
         public void GenerateNodeCode(ShaderStringBuilder sb, GenerationMode generationMode)
         {
-            var keyword = owner.keywords.FirstOrDefault(x => x.guid == keywordGuid);
-            if (keyword == null)
-                return;
-            
             var outputSlot = FindOutputSlot<MaterialSlot>(OutputSlotId);
-            switch(keyword.keywordType)
+            switch (keyword.keywordType)
             {
                 case KeywordType.Boolean:
                 {
@@ -153,14 +150,14 @@ namespace UnityEditor.ShaderGraph
                 case KeywordType.Enum:
                 {
                     // Iterate all entries in the keyword
-                    for(int i = 0; i < keyword.entries.Count; i++)
+                    for (int i = 0; i < keyword.entries.Count; i++)
                     {
                         // Insert conditional
-                        if(i == 0)
+                        if (i == 0)
                         {
                             sb.AppendLine($"#if defined({keyword.referenceName}_{keyword.entries[i].referenceName})");
                         }
-                        else if(i == keyword.entries.Count - 1)
+                        else if (i == keyword.entries.Count - 1)
                         {
                             sb.AppendLine("#else");
                         }
@@ -168,7 +165,7 @@ namespace UnityEditor.ShaderGraph
                         {
                             sb.AppendLine($"#elif defined({keyword.referenceName}_{keyword.entries[i].referenceName})");
                         }
-                        
+
                         // Append per-slot code
                         var value = GetSlotValue(GetSlotIdForPermutation(new KeyValuePair<ShaderKeyword, int>(keyword, i)), generationMode);
                         sb.AppendLine(string.Format($"{outputSlot.concreteValueType.ToShaderString()} {GetVariableNameForSlot(OutputSlotId)} = {value};"));
@@ -185,7 +182,7 @@ namespace UnityEditor.ShaderGraph
 
         public int GetSlotIdForPermutation(KeyValuePair<ShaderKeyword, int> permutation)
         {
-            switch(permutation.Key.keywordType)
+            switch (permutation.Key.keywordType)
             {
                 // Slot 0 is output
                 case KeywordType.Boolean:
@@ -198,31 +195,13 @@ namespace UnityEditor.ShaderGraph
             }
         }
 
-        protected override bool CalculateNodeHasError(ref string errorMessage)
+        protected override void CalculateNodeHasError()
         {
-            if (!keywordGuid.Equals(Guid.Empty) && !owner.keywords.Any(x => x.guid == keywordGuid))
-                return true;
-
-            return false;
-        }
-        
-        public override void OnBeforeSerialize()
-        {
-            base.OnBeforeSerialize();
-
-            // Handle keyword guid serialization
-            m_KeywordGuidSerialized = m_KeywordGuid.ToString();
-        }
-
-        public override void OnAfterDeserialize()
-        {
-            base.OnAfterDeserialize();
-
-            // Handle keyword guid serialization
-            if (!string.IsNullOrEmpty(m_KeywordGuidSerialized))
+            if (keyword == null || !owner.keywords.Any(x => x == keyword))
             {
-                m_KeywordGuid = new Guid(m_KeywordGuidSerialized);
-            } 
+                owner.AddConcretizationError(objectId, "Keyword Node has no associated keyword.");
+                hasError = true;
+            }
         }
     }
 }

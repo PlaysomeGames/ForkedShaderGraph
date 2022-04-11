@@ -17,24 +17,38 @@ namespace UnityEditor.Graphing
 
     static class NodeExtensions
     {
-        public static IEnumerable<T> GetSlots<T>(this AbstractMaterialNode node) where T : ISlot
+        public static IEnumerable<T> GetSlots<T>(this AbstractMaterialNode node) where T : MaterialSlot
         {
             var slots = new List<T>();
             node.GetSlots(slots);
             return slots;
         }
 
-        public static IEnumerable<T> GetInputSlots<T>(this AbstractMaterialNode node) where T : ISlot
+        public static IEnumerable<T> GetInputSlots<T>(this AbstractMaterialNode node) where T : MaterialSlot
         {
             var slots = new List<T>();
             node.GetInputSlots(slots);
             return slots;
         }
 
-        public static IEnumerable<T> GetOutputSlots<T>(this AbstractMaterialNode node) where T : ISlot
+        public static IEnumerable<T> GetInputSlots<T>(this AbstractMaterialNode node, MaterialSlot startingSlot) where T : MaterialSlot
+        {
+            var slots = new List<T>();
+            node.GetInputSlots(startingSlot, slots);
+            return slots;
+        }
+
+        public static IEnumerable<T> GetOutputSlots<T>(this AbstractMaterialNode node) where T : MaterialSlot
         {
             var slots = new List<T>();
             node.GetOutputSlots(slots);
+            return slots;
+        }
+
+        public static IEnumerable<T> GetOutputSlots<T>(this AbstractMaterialNode node, MaterialSlot startingSlot) where T : MaterialSlot
+        {
+            var slots = new List<T>();
+            node.GetOutputSlots(startingSlot, slots);
             return slots;
         }
     }
