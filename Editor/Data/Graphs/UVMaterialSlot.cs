@@ -19,8 +19,10 @@ namespace UnityEditor.ShaderGraph
             set { m_Channel = value; }
         }
 
+        public override bool isDefaultValue => channel == UVChannel.UV0;
+
         public UVMaterialSlot()
-        {}
+        { }
 
         public UVMaterialSlot(int slotId, string displayName, string shaderOutputName, UVChannel channel,
                               ShaderStageCapability stageCapability = ShaderStageCapability.All, bool hidden = false)

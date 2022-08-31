@@ -19,7 +19,7 @@ namespace UnityEditor.ShaderGraph
         private bool m_DefaultValue;
 
         public BooleanMaterialSlot()
-        {}
+        { }
 
         public BooleanMaterialSlot(
             int slotId,
@@ -47,6 +47,8 @@ namespace UnityEditor.ShaderGraph
             get { return m_Value; }
             set { m_Value = value; }
         }
+
+        public override bool isDefaultValue => value.Equals(defaultValue);
 
         protected override string ConcreteSlotValueAsVariable()
         {
@@ -89,6 +91,15 @@ namespace UnityEditor.ShaderGraph
             var slot = foundSlot as BooleanMaterialSlot;
             if (slot != null)
                 value = slot.value;
+        }
+
+        public override void CopyDefaultValue(MaterialSlot other)
+        {
+            base.CopyDefaultValue(other);
+            if (other is IMaterialSlotHasValue<bool> ms)
+            {
+                m_DefaultValue = ms.defaultValue;
+            }
         }
     }
 }

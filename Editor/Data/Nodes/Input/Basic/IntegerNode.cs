@@ -18,9 +18,9 @@ namespace UnityEditor.ShaderGraph
         public IntegerNode()
         {
             name = "Integer";
+            synonyms = new string[] { "whole number" };
             UpdateNodeAfterDeserialization();
         }
-
 
         public sealed override void UpdateNodeAfterDeserialization()
         {
@@ -72,7 +72,7 @@ namespace UnityEditor.ShaderGraph
 
         public override void CollectPreviewMaterialProperties(List<PreviewProperty> properties)
         {
-            properties.Add(new PreviewProperty(PropertyType.Vector1)
+            properties.Add(new PreviewProperty(PropertyType.Float)
             {
                 name = GetVariableNameForNode(),
                 floatValue = m_Value

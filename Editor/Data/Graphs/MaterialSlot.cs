@@ -1,18 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using UnityEngine;
 using UnityEditor.Graphing;
 using UnityEditor.ShaderGraph.Internal;
+using UnityEditor.ShaderGraph.Serialization;
+using UnityEditor.ShaderGraph.Drawing.Slots;
 using UnityEngine.UIElements;
 
 namespace UnityEditor.ShaderGraph
 {
     [Serializable]
-    abstract class MaterialSlot : ISlot
+    abstract class MaterialSlot : JsonObject
     {
-        const string k_NotInit =  "Not Initilaized";
+        const string k_NotInit = "Not Initialized";
 
         [SerializeField]
         int m_Id;
@@ -22,9 +23,6 @@ namespace UnityEditor.ShaderGraph
 
         [SerializeField]
         SlotType m_SlotType = SlotType.Input;
-
-        [SerializeField]
-        int m_Priority = int.MaxValue;
 
         [SerializeField]
         bool m_Hidden;
@@ -37,7 +35,7 @@ namespace UnityEditor.ShaderGraph
 
         bool m_HasError;
 
-        protected MaterialSlot() {}
+        protected MaterialSlot() { }
 
         protected MaterialSlot(int slotId, string displayName, string shaderOutputName, SlotType slotType, ShaderStageCapability stageCapability = ShaderStageCapability.All, bool hidden = false)
         {
@@ -49,15 +47,38 @@ namespace UnityEditor.ShaderGraph
             this.stageCapability = stageCapability;
         }
 
-        protected MaterialSlot(int slotId, string displayName, string shaderOutputName, SlotType slotType, int priority, ShaderStageCapability stageCapability = ShaderStageCapability.All, bool hidden = false)
+        internal void SetInternalData(SlotType slotType, string shaderOutputName)
         {
-            m_Id = slotId;
-            m_DisplayName = displayName;
-            m_SlotType = slotType;
-            m_Priority = priority;
-            m_Hidden = hidden;
-            m_ShaderOutputName = shaderOutputName;
-            this.stageCapability = stageCapability;
+            this.m_SlotType = slotType;
+            this.shaderOutputName = shaderOutputName;
+        }
+
+        public bool IsConnectionTestable()
+        {
+            if (owner is SubGraphNode sgNode)
+            {
+                var property = sgNode.GetShaderProperty(id);
+                if (property != null)
+                {
+                    return property.isConnectionTestable;
+                }
+            }
+            else if (owner is PropertyNode propertyNode)
+            {
+                return propertyNode.property.isConnectionTestable;
+            }
+            return false;
+        }
+
+        public VisualElement InstantiateCustomControl()
+        {
+            if (!isConnected && IsConnectionTestable())
+            {
+                var sgNode = owner as SubGraphNode;
+                var property = sgNode.GetShaderProperty(id);
+                return new LabelSlotControlView(property.customSlotLabel);
+            }
+            return null;
         }
 
         public virtual VisualElement InstantiateControl()
@@ -97,6 +118,10 @@ namespace UnityEditor.ShaderGraph
                     return "(C)";
                 case ConcreteSlotValueType.Gradient:
                     return "(G)";
+                case ConcreteSlotValueType.VirtualTexture:
+                    return "(VT)";
+                case ConcreteSlotValueType.PropertyConnectionState:
+                    return "(P)";
                 default:
                     return "(E)";
             }
@@ -143,6 +168,10 @@ namespace UnityEditor.ShaderGraph
                     return slotType == SlotType.Input
                         ? new CubemapInputMaterialSlot(slotId, displayName, shaderOutputName, shaderStageCapability, hidden)
                         : new CubemapMaterialSlot(slotId, displayName, shaderOutputName, slotType, shaderStageCapability, hidden);
+                case SlotValueType.VirtualTexture:
+                    return slotType == SlotType.Input
+                        ? new VirtualTextureInputMaterialSlot(slotId, displayName, shaderOutputName, shaderStageCapability, hidden)
+                        : new VirtualTextureMaterialSlot(slotId, displayName, shaderOutputName, slotType, shaderStageCapability, hidden);
                 case SlotValueType.Gradient:
                     return slotType == SlotType.Input
                         ? new GradientInputMaterialSlot(slotId, displayName, shaderOutputName, shaderStageCapability, hidden)
@@ -161,6 +190,8 @@ namespace UnityEditor.ShaderGraph
                     return new DynamicValueMaterialSlot(slotId, displayName, shaderOutputName, slotType, new Matrix4x4(defaultValue, Vector4.zero, Vector4.zero, Vector4.zero), shaderStageCapability, hidden);
                 case SlotValueType.Boolean:
                     return new BooleanMaterialSlot(slotId, displayName, shaderOutputName, slotType, false, shaderStageCapability, hidden);
+                case SlotValueType.PropertyConnectionState:
+                    return new PropertyConnectionStateMaterialSlot(slotId, displayName, shaderOutputName, slotType, shaderStageCapability, hidden);
             }
 
             throw new ArgumentOutOfRangeException("type", type, null);
@@ -168,11 +199,12 @@ namespace UnityEditor.ShaderGraph
 
         public SlotReference slotReference
         {
-            get { return new SlotReference(owner.guid, m_Id); }
+            get { return new SlotReference(owner, m_Id); }
         }
 
         public AbstractMaterialNode owner { get; set; }
 
+        // if hidden, the slot does not create a port in the UI
         public bool hidden
         {
             get { return m_Hidden; }
@@ -182,12 +214,6 @@ namespace UnityEditor.ShaderGraph
         public int id
         {
             get { return m_Id; }
-        }
-
-        public int priority
-        {
-            get { return m_Priority; }
-            set { m_Priority = value; }
         }
 
         public bool isInputSlot
@@ -219,6 +245,8 @@ namespace UnityEditor.ShaderGraph
             }
         }
 
+        public abstract bool isDefaultValue { get; }
+
         public abstract SlotValueType valueType { get; }
 
         public abstract ConcreteSlotValueType concreteValueType { get; }
@@ -241,20 +269,33 @@ namespace UnityEditor.ShaderGraph
             set { m_HasError = value; }
         }
 
+        public bool IsUsingDefaultValue()
+        {
+            if (!isConnected && isDefaultValue)
+                return true;
+            else
+                return false;
+        }
+
         public bool IsCompatibleWith(MaterialSlot otherSlot)
         {
             return otherSlot != null
                 && otherSlot.owner != owner
                 && otherSlot.isInputSlot != isInputSlot
+                && !hidden
+                && !otherSlot.hidden
                 && ((isInputSlot
-                     ? SlotValueHelper.AreCompatible(valueType, otherSlot.concreteValueType)
-                     : SlotValueHelper.AreCompatible(otherSlot.valueType, concreteValueType)));
+                    ? SlotValueHelper.AreCompatible(valueType, otherSlot.concreteValueType, otherSlot.IsConnectionTestable())
+                    : SlotValueHelper.AreCompatible(otherSlot.valueType, concreteValueType, IsConnectionTestable())));
         }
 
         public bool IsCompatibleStageWith(MaterialSlot otherSlot)
         {
-            var candidateStage = otherSlot.stageCapability;
-            return stageCapability == ShaderStageCapability.All || candidateStage == stageCapability;
+            var startStage = otherSlot.stageCapability;
+            if (startStage == ShaderStageCapability.All || otherSlot.owner is SubGraphNode)
+                startStage = NodeUtils.GetEffectiveShaderStageCapability(otherSlot, true)
+                    & NodeUtils.GetEffectiveShaderStageCapability(otherSlot, false);
+            return startStage == ShaderStageCapability.All || stageCapability == ShaderStageCapability.All || stageCapability == startStage;
         }
 
         public string GetDefaultValue(GenerationMode generationMode, ConcretePrecision concretePrecision)
@@ -269,7 +310,7 @@ namespace UnityEditor.ShaderGraph
             if (matOwner == null)
                 throw new Exception(string.Format("Slot {0} either has no owner, or the owner is not a {1}", this, typeof(AbstractMaterialNode)));
 
-            if (generationMode.IsPreview())
+            if (generationMode.IsPreview() && matOwner.isActive)
                 return matOwner.GetVariableNameForSlot(id);
 
             return ConcreteSlotValueAsVariable();
@@ -287,16 +328,18 @@ namespace UnityEditor.ShaderGraph
             properties.Add(default(PreviewProperty));
         }
 
-        public abstract void CopyValuesFrom(MaterialSlot foundSlot);
-
-        bool Equals(MaterialSlot other)
+        public virtual void AppendHLSLParameterDeclaration(ShaderStringBuilder sb, string paramName)
         {
-            return m_Id == other.m_Id && owner.guid.Equals(other.owner.guid);
+            sb.Append(concreteValueType.ToShaderString());
+            sb.Append(" ");
+            sb.Append(paramName);
         }
 
-        public bool Equals(ISlot other)
+        public abstract void CopyValuesFrom(MaterialSlot foundSlot);
+
+        public bool Equals(MaterialSlot other)
         {
-            return Equals(other as object);
+            return m_Id == other.m_Id && owner == other.owner;
         }
 
         public override bool Equals(object obj)
@@ -313,6 +356,20 @@ namespace UnityEditor.ShaderGraph
             {
                 return (m_Id * 397) ^ (owner != null ? owner.GetHashCode() : 0);
             }
+        }
+
+        // this tracks old CustomFunctionNode slots that are expecting the old bare resource inputs
+        // rather than the new structure-based inputs
+        internal virtual bool bareResource { get { return false; } set { } }
+
+        public virtual void CopyDefaultValue(MaterialSlot other)
+        {
+            m_Id = other.m_Id;
+            m_DisplayName = other.m_DisplayName;
+            m_SlotType = other.m_SlotType;
+            m_Hidden = other.m_Hidden;
+            m_ShaderOutputName = other.m_ShaderOutputName;
+            m_StageCapability = other.m_StageCapability;
         }
     }
 }

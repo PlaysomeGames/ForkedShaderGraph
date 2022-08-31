@@ -3,14 +3,31 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEditor.ShaderGraph;
+using UnityEditor.ShaderGraph.Serialization;
 
 namespace UnityEditor.Graphing.IntegrationTests
 {
     [TestFixture]
     public class SerializationTests
     {
+        private class DummyJsonHolder : JsonObject
+        {
+            public List<JsonData<MaterialSlot>> testSlots = new List<JsonData<MaterialSlot>>();
+
+            public DummyJsonHolder() : base()
+            {
+            }
+
+            public DummyJsonHolder(List<MaterialSlot> materialSlots)
+            {
+                foreach (var slot in materialSlots)
+                {
+                    testSlots.Add(slot);
+                }
+            }
+        }
         interface ITestInterface
-        {}
+        { }
 
         [Serializable]
         class SimpleSerializeClass : ITestInterface
@@ -36,7 +53,7 @@ namespace UnityEditor.Graphing.IntegrationTests
                         stringValue = "ABCD",
                         intValue = 5,
                         floatValue = 7.7f,
-                        arrayValue = new[] {1, 2, 3, 4}
+                        arrayValue = new[] { 1, 2, 3, 4 }
                     };
                 }
             }
@@ -67,7 +84,7 @@ namespace UnityEditor.Graphing.IntegrationTests
                         stringValue = "qwee",
                         intValue = 5,
                         floatValue = 6f,
-                        arrayValue = new[] {5, 6, 7, 8},
+                        arrayValue = new[] { 5, 6, 7, 8 },
                         childString = "CHILD"
                     };
                 }
@@ -100,7 +117,7 @@ namespace UnityEditor.Graphing.IntegrationTests
                         stringValue = "qwee",
                         intValue = 5,
                         floatValue = 6f,
-                        arrayValue = new[] {5, 6, 7, 8},
+                        arrayValue = new[] { 5, 6, 7, 8 },
                         childInt = 666
                     };
                 }
@@ -217,13 +234,17 @@ namespace UnityEditor.Graphing.IntegrationTests
         {
             var toSerialize = new List<MaterialSlot>()
             {
-                new TestSlot(0, "InSlot", SlotType.Input, 0),
-                new TestSlot(1, "OutSlot", SlotType.Output, 5),
+                new TestSlot(0, "InSlot", SlotType.Input),
+                new TestSlot(1, "OutSlot", SlotType.Output),
             };
 
-            var serialized = SerializationHelper.Serialize<MaterialSlot>(toSerialize);
-            var loaded = SerializationHelper.Deserialize<MaterialSlot>(serialized, GraphUtil.GetLegacyTypeRemapping());
-            Assert.AreEqual(2, loaded.Count);
+            DummyJsonHolder dummyJsonHolder = new DummyJsonHolder(toSerialize);
+
+            var serialized = MultiJson.Serialize(dummyJsonHolder);
+            DummyJsonHolder dummyJsonHolder1 = new DummyJsonHolder();
+            MultiJson.Deserialize(dummyJsonHolder1, serialized);
+            Assert.AreEqual(2, dummyJsonHolder1.testSlots.Count);
+            var loaded = new List<MaterialSlot>(dummyJsonHolder1.testSlots.SelectValue());
 
             Assert.IsInstanceOf<MaterialSlot>(loaded[0]);
             Assert.IsInstanceOf<MaterialSlot>(loaded[1]);
@@ -231,12 +252,10 @@ namespace UnityEditor.Graphing.IntegrationTests
             Assert.AreEqual(0, loaded[0].id);
             Assert.AreEqual("InSlot(4)", loaded[0].displayName);
             Assert.IsTrue(loaded[0].isInputSlot);
-            Assert.AreEqual(0, loaded[0].priority);
 
             Assert.AreEqual(1, loaded[1].id);
             Assert.AreEqual("OutSlot(4)", loaded[1].displayName);
             Assert.IsTrue(loaded[1].isOutputSlot);
-            Assert.AreEqual(5, loaded[1].priority);
         }
     }
 }

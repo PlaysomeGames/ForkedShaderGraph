@@ -19,9 +19,9 @@ namespace UnityEditor.ShaderGraph
         [SerializeField]
         private Vector4 m_DefaultValue = Vector4.zero;
 
-        static readonly string[] k_Labels = {"X", "Y", "Z", "W"};
+        static readonly string[] k_Labels = { "X", "Y", "Z", "W" };
 
-        private ConcreteSlotValueType m_ConcreteValueType = ConcreteSlotValueType.Vector4;
+        private ConcreteSlotValueType m_ConcreteValueType = ConcreteSlotValueType.Vector1;
 
         public DynamicVectorMaterialSlot()
         {
@@ -48,6 +48,8 @@ namespace UnityEditor.ShaderGraph
             set { m_Value = value; }
         }
 
+        public override bool isDefaultValue => value.Equals(defaultValue);
+
         public override VisualElement InstantiateControl()
         {
             var labels = k_Labels.Take(concreteValueType.GetChannelCount()).ToArray();
@@ -70,7 +72,7 @@ namespace UnityEditor.ShaderGraph
         {
             var propType = concreteValueType.ToPropertyType();
             var pp = new PreviewProperty(propType) { name = name };
-            if (propType == PropertyType.Vector1)
+            if (propType == PropertyType.Float)
                 pp.floatValue = value.x;
             else
                 pp.vector4Value = new Vector4(value.x, value.y, value.z, value.w);
@@ -129,6 +131,15 @@ namespace UnityEditor.ShaderGraph
             var slot = foundSlot as DynamicVectorMaterialSlot;
             if (slot != null)
                 value = slot.value;
+        }
+
+        public override void CopyDefaultValue(MaterialSlot other)
+        {
+            base.CopyDefaultValue(other);
+            if (other is IMaterialSlotHasValue<Vector4> ms)
+            {
+                m_DefaultValue = ms.defaultValue;
+            }
         }
     }
 }

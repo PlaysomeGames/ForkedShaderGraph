@@ -6,7 +6,7 @@ using UnityEngine.UIElements.StyleSheets;
 namespace UnityEditor.ShaderGraph.Drawing
 {
     [Serializable]
-    class WindowDockingLayout
+    internal class WindowDockingLayout
     {
         [SerializeField]
         bool m_DockingLeft;
@@ -97,8 +97,8 @@ namespace UnityEditor.ShaderGraph.Drawing
             }
             else
             {
-                target.style.left = float.NaN;
                 target.style.right = horizontalOffset;
+                target.style.left = float.NaN;
             }
 
             if (dockingTop)

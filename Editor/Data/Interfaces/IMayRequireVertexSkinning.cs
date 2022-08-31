@@ -1,4 +1,4 @@
-﻿using UnityEditor.Graphing;
+using UnityEditor.Graphing;
 
 namespace UnityEditor.ShaderGraph
 {
@@ -9,7 +9,7 @@ namespace UnityEditor.ShaderGraph
 
     static class MayRequireVertexSkinningExtensions
     {
-        public static bool RequiresVertexSkinning(this ISlot slot)
+        public static bool RequiresVertexSkinning(this MaterialSlot slot)
         {
             var mayRequireVertexSkinning = slot as IMayRequireVertexSkinning;
             return mayRequireVertexSkinning != null && mayRequireVertexSkinning.RequiresVertexSkinning();

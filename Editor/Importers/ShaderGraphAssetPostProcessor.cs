@@ -38,7 +38,20 @@ namespace UnityEditor.ShaderGraph
                 for (int i = 0; i < newNames.Length; ++i)
                 {
                     if (matGraphEditWindow.selectedGuid == AssetDatabase.AssetPathToGUID(newNames[i]))
-                        matGraphEditWindow.assetName = Path.GetFileNameWithoutExtension(newNames[i]).Split('/').Last();
+                        matGraphEditWindow.UpdateTitle();
+                }
+            }
+        }
+
+        static void DisplayDeletionDialog(string[] deletedAssets)
+        {
+            MaterialGraphEditWindow[] windows = Resources.FindObjectsOfTypeAll<MaterialGraphEditWindow>();
+            foreach (var matGraphEditWindow in windows)
+            {
+                for (int i = 0; i < deletedAssets.Length; ++i)
+                {
+                    if (matGraphEditWindow.selectedGuid == AssetDatabase.AssetPathToGUID(deletedAssets[i]))
+                        matGraphEditWindow.AssetWasDeleted();
                 }
             }
         }
@@ -47,24 +60,46 @@ namespace UnityEditor.ShaderGraph
         {
             RegisterShaders(importedAssets);
 
-            bool anyShaders = movedAssets.Any(val => val.EndsWith(ShaderGraphImporter.Extension, StringComparison.InvariantCultureIgnoreCase));
-            anyShaders |= movedAssets.Any(val => val.EndsWith(ShaderSubGraphImporter.Extension, StringComparison.InvariantCultureIgnoreCase));
-            if (anyShaders)
+            // Moved assets
+            bool anyMovedShaders = movedAssets.Any(val => val.EndsWith(ShaderGraphImporter.Extension, StringComparison.InvariantCultureIgnoreCase));
+            anyMovedShaders |= movedAssets.Any(val => val.EndsWith(ShaderSubGraphImporter.Extension, StringComparison.InvariantCultureIgnoreCase));
+            if (anyMovedShaders)
                 UpdateAfterAssetChange(movedAssets);
-            
-            var changedFiles = movedAssets.Union(importedAssets)
+
+            // Deleted assets
+            bool anyRemovedShaders = deletedAssets.Any(val => val.EndsWith(ShaderGraphImporter.Extension, StringComparison.InvariantCultureIgnoreCase));
+            anyRemovedShaders |= deletedAssets.Any(val => val.EndsWith(ShaderSubGraphImporter.Extension, StringComparison.InvariantCultureIgnoreCase));
+            if (anyRemovedShaders)
+                DisplayDeletionDialog(deletedAssets);
+
+            var windows = Resources.FindObjectsOfTypeAll<MaterialGraphEditWindow>();
+
+            var changedGraphGuids = importedAssets
+                .Where(x => x.EndsWith(ShaderGraphImporter.Extension, StringComparison.InvariantCultureIgnoreCase)
+                || x.EndsWith(ShaderSubGraphImporter.Extension, StringComparison.InvariantCultureIgnoreCase))
+                .Select(AssetDatabase.AssetPathToGUID)
+                .ToList();
+            foreach (var window in windows)
+            {
+                if (changedGraphGuids.Contains(window.selectedGuid))
+                {
+                    window.CheckForChanges();
+                }
+            }
+
+            // moved or imported subgraphs or HLSL files should notify open shadergraphs that they need to handle them
+            var changedFileGUIDs = movedAssets.Concat(importedAssets).Concat(deletedAssets)
                 .Where(x => x.EndsWith(ShaderSubGraphImporter.Extension, StringComparison.InvariantCultureIgnoreCase)
-                || CustomFunctionNode.s_ValidExtensions.Contains(Path.GetExtension(x)))
+                    || CustomFunctionNode.s_ValidExtensions.Contains(Path.GetExtension(x)))
                 .Select(AssetDatabase.AssetPathToGUID)
                 .Distinct()
                 .ToList();
 
-            if (changedFiles.Count > 0)
+            if (changedFileGUIDs.Count > 0)
             {
-                var windows = Resources.FindObjectsOfTypeAll<MaterialGraphEditWindow>();
                 foreach (var window in windows)
                 {
-                    window.ReloadSubGraphsOnNextUpdate(changedFiles);
+                    window.ReloadSubGraphsOnNextUpdate(changedFileGUIDs);
                 }
             }
         }
